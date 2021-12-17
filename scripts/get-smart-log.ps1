@@ -28,7 +28,7 @@ public class NativeMethods {
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
-public struct NVMeStorageQueryProperty {
+public class NVMeStorageQueryProperty {
     public UInt32 PropertyId;
     public UInt32 QueryType;
     public UInt32 ProtocolType;
@@ -97,49 +97,43 @@ catch {
      Return;
 }
 
+$Property = [NVMeStorageQueryProperty]@{
+    PropertyId                  = 50;           # StorageDeviceProtocolSpecificProperty
+    QueryType                   = 0;            # PropertyStandardQuery
+    ProtocolType                = 3;            # ProtocolTypeNvme
+    DataType                    = 2;            # NVMeDataTypeLogPage
+    ProtocolDataRequestValue    = 2;            # NVME_LOG_PAGE_HEALTH_INFO
+    ProtocolDataRequestSubValue = '0xFFFFFFFF'; # Namespace ID
+    ProtocolDataOffset          = 40;           # sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA)
+    ProtocolDataLength          = 512;          # sizeof(NVME_SMART_INFO_LOG)
+}
 # offsetof(STORAGE_PROPERTY_QUERY, AdditionalParameters)
 #  + sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA)
 #  + sizeof(NVME_SMART_INFO_LOG) = 560
-$OutBufferSize = 8 + 40 + 512; # = 560
-$OutBuffer     = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($OutBufferSize);
-
-$Property      = New-Object NVMeStorageQueryProperty;
-$PropertySize  = [System.Runtime.InteropServices.Marshal]::SizeOf($Property);
-
-if ( $PropertySize -ne $OutBufferSize ) {
+$PropertySize = [System.Runtime.InteropServices.Marshal]::SizeOf($Property);
+if ( $PropertySize -ne 560 ) {
     Write-Output "`n[E] Size of structure is $PropertySize bytes, expect 560 bytes, stop";
     Return;
 }
 
-$Property.PropertyId    = 50; # StorageDeviceProtocolSpecificProperty
-$Property.QueryType     = 0;  # PropertyStandardQuery
-$Property.ProtocolType  = 3;  # ProtocolTypeNvme
-$Property.DataType      = 2;  # NVMeDataTypeLogPage
-
-$Property.ProtocolDataRequestValue      = 2; # NVME_LOG_PAGE_HEALTH_INFO
-$Property.ProtocolDataRequestSubValue   = [System.Convert]::ToUInt32("4294967295"); # Namespace ID (0xFFFFFFFF)
-
-$Property.ProtocolDataOffset = 40;  # sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA)
-$Property.ProtocolDataLength = 512; # sizeof(NVME_SMART_INFO_LOG)
-
 $ByteRet = 0;
 $IoControlCode = 0x2d1400; # IOCTL_STORAGE_QUERY_PROPERTY
-
-[System.Runtime.InteropServices.Marshal]::StructureToPtr($Property, $OutBuffer, [System.Boolean]::false);
-$CallResult = [NativeMethods]::DeviceIoControl($DeviceFile.SafeFileHandle, $IoControlCode, $OutBuffer, $OutBufferSize, $OutBuffer, $OutBufferSize, [ref]$ByteRet, [System.IntPtr]::Zero);
-
-$LastError = [ComponentModel.Win32Exception][Runtime.InteropServices.Marshal]::GetLastWin32Error();
+$GCHandle = [System.Runtime.InteropServices.GCHandle]::Alloc($Property, 'Pinned');
+$PropertyAddr = $GCHandle.AddrOfPinnedObject();
+$CallResult = [NativeMethods]::DeviceIoControl($DeviceFile.SafeFileHandle, $IoControlCode, $PropertyAddr, $PropertySize, $PropertyAddr, $PropertySize, [ref]$ByteRet, 0);
+$LastError = [System.ComponentModel.Win32Exception]::New();
+$GCHandle.Free();
 if ( -not $CallResult ) {
     Write-Output "`n[E] DeviceIoControl() failed: $LastError";
     Return;
 }
 
-if ( $ByteRet -ne 560 ) {
-    Write-Output "`n[E] Data size returned ($ByteRet bytes) is wrong; expect $OutBufferSize bytes";
+if ( $ByteRet -ne $PropertySize ) {
+    Write-Output "`n[E] Data size returned ($ByteRet bytes) is wrong; expect $PropertySize bytes";
     Return;
 }
 
-$SMARTData = [SMARTData][System.Runtime.InteropServices.Marshal]::PtrToStructure([IntPtr]::Add($OutBuffer, 48), [Type][SMARTData]);
+$SMARTData = $Property.SMARTData
 Write-Output @"
 Critical Warning: $('0x{0:X2}' -f $SMARTData.CriticalWarning)
 Composite Temperature: $($SMARTData.Temperature) (K)
@@ -173,5 +167,4 @@ Total Time For Thermal Management Temperature 1: $($SMARTData.TMT1TotalTime) (se
 Total Time For Thermal Management Temperature 2: $($SMARTData.TMT2TotalTime) (seconds)
 "@
 
-[System.Runtime.InteropServices.Marshal]::FreeHGlobal($OutBuffer);
 $DeviceFile.Close();
