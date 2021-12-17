@@ -8,35 +8,24 @@ Copyright (c) 2021 Hagiwara Solutions Co., Ltd.
 #>
 Param([parameter(mandatory)][Int]$PhyDrvNo)
 
-$KernelService = Add-Type -Name 'Kernel32' -Namespace 'Win32' -PassThru -MemberDefinition @"
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    public static extern IntPtr CreateFile(
-        String lpFileName,
-        UInt32 dwDesiredAccess,
-        UInt32 dwShareMode,
-        IntPtr lpSecurityAttributes,
-        UInt32 dwCreationDisposition,
-        UInt32 dwFlagsAndAttributes,
-        IntPtr hTemplateFile);
-
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    public static extern bool DeviceIoControl(
-        IntPtr  hDevice,
-        int     oControlCode,
-        IntPtr  InBuffer,
-        int     nInBufferSize,
-        IntPtr  OutBuffer,
-        int     nOutBufferSize,
-        ref int pBytesReturned,
-        IntPtr  Overlapped);
-
-    [DllImport("kernel32.dll", SetLastError=true)]
-    public static extern bool CloseHandle(IntPtr hObject);
-"@
-
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+public class NativeMethods {
+    [DllImport("Kernel32.dll", SetLastError = true)]
+    public static extern bool DeviceIoControl(
+        SafeFileHandle hDevice,
+        UInt32         dwIoControlCode,
+        IntPtr         lpInBuffer,
+        UInt32         nInBufferSize,
+        IntPtr         lpOutBuffer,
+        UInt32         nOutBufferSize,
+        ref UInt32     lpBytesReturned,
+        IntPtr         lpOverlapped
+    );
+}
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct NVMeStorageQueryProperty {
@@ -100,16 +89,11 @@ public struct UInt128 {
 }
 "@
 
-$AccessMask = "3221225472"; # = 0xC00000000 = GENERIC_READ (0x80000000) | GENERIC_WRITE (0x40000000)
-$AccessMode = 3; # FILE_SHARE_READ | FILE_SHARE_WRITE
-$AccessEx   = 3; # OPEN_EXISTING
-$AccessAttr = 0x40; # FILE_ATTRIBUTE_DEVICE
-
-$DeviceHandle = $KernelService::CreateFile("\\.\PhysicalDrive$PhyDrvNo", [System.Convert]::ToUInt32($AccessMask), $AccessMode, [System.IntPtr]::Zero, $AccessEx, $AccessAttr, [System.IntPtr]::Zero);
-
-$LastError = [ComponentModel.Win32Exception][Runtime.InteropServices.Marshal]::GetLastWin32Error()
-if ($DeviceHandle -eq [System.IntPtr]::Zero) {
-     Write-Output "`n[E] CreateFile failed: $LastError";
+try {
+    $DeviceFile = [System.IO.FileStream]::New("\\.\PhysicalDrive$PhyDrvNo", 'Open');
+}
+catch {
+     Write-Output "`n[E] CreateFile failed: $_";
      Return;
 }
 
@@ -142,10 +126,10 @@ $ByteRet = 0;
 $IoControlCode = 0x2d1400; # IOCTL_STORAGE_QUERY_PROPERTY
 
 [System.Runtime.InteropServices.Marshal]::StructureToPtr($Property, $OutBuffer, [System.Boolean]::false);
-$CallResult = $KernelService::DeviceIoControl($DeviceHandle, $IoControlCode, $OutBuffer, $OutBufferSize, $OutBuffer, $OutBufferSize, [ref]$ByteRet, [System.IntPtr]::Zero);
+$CallResult = [NativeMethods]::DeviceIoControl($DeviceFile.SafeFileHandle, $IoControlCode, $OutBuffer, $OutBufferSize, $OutBuffer, $OutBufferSize, [ref]$ByteRet, [System.IntPtr]::Zero);
 
 $LastError = [ComponentModel.Win32Exception][Runtime.InteropServices.Marshal]::GetLastWin32Error();
-if ( $CallResult -eq 0 ) {
+if ( -not $CallResult ) {
     Write-Output "`n[E] DeviceIoControl() failed: $LastError";
     Return;
 }
@@ -190,4 +174,4 @@ Total Time For Thermal Management Temperature 2: $($SMARTData.TMT2TotalTime) (se
 "@
 
 [System.Runtime.InteropServices.Marshal]::FreeHGlobal($OutBuffer);
-[void]$KernelService::CloseHandle($DeviceHandle);
+$DeviceFile.Close();
