@@ -52,70 +52,51 @@ public struct NVMeStorageQueryProperty {
     public UInt32 ProtocolDataRequestSubValue2;
     public UInt32 ProtocolDataRequestSubValue3;
     public UInt32 Reserved0;
+    public SMARTData SMARTData;
+}
 
-    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 512)]
-    public Byte[] SMARTData;
+[StructLayout(LayoutKind.Explicit, Size = 512)]
+public struct SMARTData {
+    // Followings are the data structure of SMART Log page in NVMe rev1.4b
+    [FieldOffset(  0)] public Byte    CriticalWarning;
+    [FieldOffset(  1)] public UInt16  Temperature;
+    [FieldOffset(  3)] public Byte    AvailableSpare;
+    [FieldOffset(  4)] public Byte    AvailableSpareThreshold;
+    [FieldOffset(  5)] public Byte    PercentageUsed;
+    [FieldOffset(  6)] public Byte    EnduranceGroupSummary;
+    [FieldOffset( 32)] public UInt128 DataUnitRead;
+    [FieldOffset( 48)] public UInt128 DataUnitWritten;
+    [FieldOffset( 64)] public UInt128 HostReadCommands;
+    [FieldOffset( 80)] public UInt128 HostWriteCommands;
+    [FieldOffset( 96)] public UInt128 ControllerBusyTime;
+    [FieldOffset(112)] public UInt128 PowerCycle;
+    [FieldOffset(128)] public UInt128 PowerOnHours;
+    [FieldOffset(144)] public UInt128 UnsafeShutdowns;
+    [FieldOffset(160)] public UInt128 MediaErrors;
+    [FieldOffset(176)] public UInt128 ErrorLogInfoEntryNum;
+    [FieldOffset(192)] public UInt32  WCTempTime;
+    [FieldOffset(196)] public UInt32  CCTempTime;
+    [FieldOffset(200)] public UInt16  TempSensor1;
+    [FieldOffset(202)] public UInt16  TempSensor2;
+    [FieldOffset(204)] public UInt16  TempSensor3;
+    [FieldOffset(206)] public UInt16  TempSensor4;
+    [FieldOffset(208)] public UInt16  TempSensor5;
+    [FieldOffset(210)] public UInt16  TempSensor6;
+    [FieldOffset(212)] public UInt16  TempSensor7;
+    [FieldOffset(214)] public UInt16  TempSensor8;
+    [FieldOffset(216)] public UInt32  TMT1TransitionCount;
+    [FieldOffset(220)] public UInt32  TMT2TransitionCount;
+    [FieldOffset(224)] public UInt32  TMT1TotalTime;
+    [FieldOffset(228)] public UInt32  TMT2TotalTime;
+}
 
-//    Followings are the data structure of SMART Log page in NVMe rev1.4b
-// 
-//                                            // byte offset from the head of this structure
-//    public Byte   CriticalWarning;          // byte 48
-//    public UInt16 Temperature;              // byte 49
-//    public Byte   AvailableSpare;           // byte 51
-//    public Byte   AvailableSpareThreshold;  // byte 52
-//    public Byte   PercentageUsed;           // byte 53
-//    public Byte   EnduranceGroupSummary;    // byte 54
-
-//    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 25)]
-//    public Byte[] Reserved1;                // byte 55
-
-//    public UInt64 DataUnitReadL;            // byte 80
-//    public UInt64 DataUnitReadH;            // byte 88
-
-//    public UInt64 DataUnitWrittenL;         // byte 96
-//    public UInt64 DataUnitWrittenH;         // byte 104
-
-//    public UInt64 HostReadCommandsL;        // byte 112
-//    public UInt64 HostReadCommandsH;        // byte 120
-
-//    public UInt64 HostWriteCommandsL;       // byte 128
-//    public UInt64 HostWriteCommandsH;       // byte 136
-
-//    public UInt64 ControllerBusyTimeL;      // byte 144
-//    public UInt64 ControllerBusyTimeH;      // byte 152
-
-//    public UInt64 PowerCycleL;              // byte 160
-//    public UInt64 PowerCycleH;              // byte 168
-
-//    public UInt64 PowerOnHoursL;            // byte 176
-//    public UInt64 PowerOnHoursH;            // byte 184
-
-//    public UInt64 UnsafeShutdownsL;         // byte 192
-//    public UInt64 UnsafeShutdownsH;         // byte 200
-
-//    public UInt64 MediaErrorsL;             // byte 208
-//    public UInt64 MediaErrorsH;             // byte 216
-
-//    public UInt64 ErrorLogInfoEntryNumL;    // byte 224
-//    public UInt64 ErrorLogInfoEntryNumH;    // byte 232
-
-//    public UInt32 WCTempTime;               // byte 240
-//    public UInt32 CCTempTime;               // byte 244
-//    public UInt16 TempSensor1;              // byte 248
-//    public UInt16 TempSensor2;              // byte 250
-//    public UInt16 TempSensor3;              // byte 252
-//    public UInt16 TempSensor4;              // byte 254
-//    public UInt16 TempSensor5;              // byte 256
-//    public UInt16 TempSensor6;              // byte 258
-//    public UInt16 TempSensor7;              // byte 260
-//    public UInt16 TempSensor8;              // byte 262
-//    public UInt32 TMT1TransitionCount;      // byte 264
-//    public UInt32 TMT2TransitionCount;      // byte 268
-//    public UInt32 TMT1TotalTime;            // byte 272
-//    public UInt32 TMT2TotalTime;            // byte 276
-//
-//    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 280)]
-//    public Byte[] Reserved2;                // byte 280
+[StructLayout(LayoutKind.Sequential)]
+public struct UInt128 {
+    public UInt64 Low;
+    public UInt64 High;
+    public override String ToString() {
+        return String.Format("0x{0:X8}{1:X8}", High, Low);
+    }
 }
 "@
 
@@ -174,36 +155,39 @@ if ( $ByteRet -ne 560 ) {
     Return;
 }
 
-Write-Output( "Critical Warning: 0x{0}" -F [System.Runtime.InteropServices.Marshal]::ReadByte($OutBuffer, 48).ToString("X2") );
-Write-Output( "Composite Temperature: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 49) );
-Write-Output( "Available Spare: {0} (%)" -F [System.Runtime.InteropServices.Marshal]::ReadByte($OutBuffer, 51) );
-Write-Output( "Available Spare Threshold: {0} (%)" -F [System.Runtime.InteropServices.Marshal]::ReadByte($OutBuffer, 52) );
-Write-Output( "Percentage Used: {0} (%)" -F [System.Runtime.InteropServices.Marshal]::ReadByte($OutBuffer, 53) );
-Write-Output( "Endurance Group Summary: 0x{0}" -F [System.Runtime.InteropServices.Marshal]::ReadByte($OutBuffer, 54).ToString("X2") );
-Write-Output( "Data Unit Read: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 88).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 80).ToString("X8") );
-Write-Output( "Data Unit Written: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 104).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 96).ToString("X8") );
-Write-Output( "Host Read Commands: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 120).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 112).ToString("X8") );
-Write-Output( "Host Write Commands: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 136).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 128).ToString("X8") );
-Write-Output( "Controller Busy Time: 0x{0}{1} (minutes)" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 152).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 144).ToString("X8") );
-Write-Output( "Power Cycles: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 168).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 160).ToString("X8") );
-Write-Output( "Power On Hours: 0x{0}{1} (hours)" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 184).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 176).ToString("X8") );
-Write-Output( "Unsafe Shutdowns: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 200).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 192).ToString("X8") );
-Write-Output( "Media and Data Integrity Errors: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 216).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 208).ToString("X8") );
-Write-Output( "Number of Error Information Entries: 0x{0}{1}" -F [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 232).ToString("X8"), [System.Runtime.InteropServices.Marshal]::ReadInt64($OutBuffer, 224).ToString("X8") );
-Write-Output( "Warning Composite Temperature Time: {0} (minutes)" -F [System.Runtime.InteropServices.Marshal]::ReadInt32($OutBuffer, 240) );
-Write-Output( "Critical Composite Temperature Time: {0} (minutes)" -F [System.Runtime.InteropServices.Marshal]::ReadInt32($OutBuffer, 244) );
-Write-Output( "Temperature Sensor 1: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 248) );
-Write-Output( "Temperature Sensor 2: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 250) );
-Write-Output( "Temperature Sensor 3: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 252) );
-Write-Output( "Temperature Sensor 4: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 254) );
-Write-Output( "Temperature Sensor 5: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 256) );
-Write-Output( "Temperature Sensor 6: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 258) );
-Write-Output( "Temperature Sensor 7: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 260) );
-Write-Output( "Temperature Sensor 8: {0} (K)" -F [System.Runtime.InteropServices.Marshal]::ReadInt16($OutBuffer, 262) );
-Write-Output( "Thermal Management Temperature 1 Transition Count: {0} (times)" -F [System.Runtime.InteropServices.Marshal]::ReadInt32($OutBuffer, 264) );
-Write-Output( "Thermal Management Temperature 2 Transition Count: {0} (times)" -F [System.Runtime.InteropServices.Marshal]::ReadInt32($OutBuffer, 268) );
-Write-Output( "Total Time For Thermal Management Temperature 1: {0} (seconds)" -F [System.Runtime.InteropServices.Marshal]::ReadInt32($OutBuffer, 272) );
-Write-Output( "Total Time For Thermal Management Temperature 2: {0} (seconds)" -F [System.Runtime.InteropServices.Marshal]::ReadInt32($OutBuffer, 276) );
+$SMARTData = [SMARTData][System.Runtime.InteropServices.Marshal]::PtrToStructure([IntPtr]::Add($OutBuffer, 48), [Type][SMARTData]);
+Write-Output @"
+Critical Warning: $('0x{0:X2}' -f $SMARTData.CriticalWarning)
+Composite Temperature: $($SMARTData.Temperature) (K)
+Available Spare: $($SMARTData.AvailableSpare) (%)
+Available Spare Threshold: $($SMARTData.AvailableSpareThreshold) (%)
+Percentage Used: $($SMARTData.PercentageUsed) (%)
+Endurance Group Summary: $('0x{0:X2}' -f $SMARTData.EnduranceGroupSummary)
+Data Unit Read: $($SMARTData.DataUnitRead)
+Data Unit Written: $($SMARTData.DataUnitWritten)
+Host Read Commands: $($SMARTData.HostReadCommands)
+Host Write Commands: $($SMARTData.HostWriteCommands)
+Controller Busy Time: $($SMARTData.ControllerBusyTime) (minutes)
+Power Cycles: $($SMARTData.PowerCycle)
+Power On Hours: $($SMARTData.PowerOnHours) (hours)
+Unsafe Shutdowns: $($SMARTData.UnsafeShutdowns)
+Media and Data Integrity Errors: $($SMARTData.MediaErrors)
+Number of Error Information Entries: $($SMARTData.ErrorLogInfoEntryNum)
+Warning Composite Temperature Time: $($SMARTData.WCTempTime) (minutes)
+Critical Composite Temperature Time: $($SMARTData.CCTempTime) (minutes)
+Temperature Sensor 1: $($SMARTData.TempSensor1) (K)
+Temperature Sensor 2: $($SMARTData.TempSensor2) (K)
+Temperature Sensor 3: $($SMARTData.TempSensor3) (K)
+Temperature Sensor 4: $($SMARTData.TempSensor4) (K)
+Temperature Sensor 5: $($SMARTData.TempSensor5) (K)
+Temperature Sensor 6: $($SMARTData.TempSensor6) (K)
+Temperature Sensor 7: $($SMARTData.TempSensor7) (K)
+Temperature Sensor 8: $($SMARTData.TempSensor8) (K)
+Thermal Management Temperature 1 Transition Count: $($SMARTData.TMT1TransitionCount) (times)
+Thermal Management Temperature 2 Transition Count: $($SMARTData.TMT2TransitionCount) (times)
+Total Time For Thermal Management Temperature 1: $($SMARTData.TMT1TotalTime) (seconds)
+Total Time For Thermal Management Temperature 2: $($SMARTData.TMT2TotalTime) (seconds)
+"@
 
 [System.Runtime.InteropServices.Marshal]::FreeHGlobal($OutBuffer);
 [void]$KernelService::CloseHandle($DeviceHandle);
